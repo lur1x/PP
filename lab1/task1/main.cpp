@@ -2,14 +2,20 @@
 #include <string>
 #include <iostream>
 #include <tchar.h>
+
 CRITICAL_SECTION cs;
 
 DWORD WINAPI ThreadProc(CONST LPVOID lpParam)
 {
 	int threadNum = *(int*)lpParam;
+
 	EnterCriticalSection(&cs);
+
 	std::cout << "Поток №" << threadNum << " выполняет свою работу" << std::endl;
+
 	LeaveCriticalSection(&cs);
+
+
 	ExitThread(0);
 }
 
@@ -55,20 +61,23 @@ int _tmain(int argc, _TCHAR* argv[])
 		return 1;
 	}
 
-	if (N > MAXIMUM_WAIT_OBJECTS) 
-	{ 
-		std::cerr << "Ошибка: максимальное количество потоков — " << MAXIMUM_WAIT_OBJECTS << std::endl;
+	if (N > MAXIMUM_WAIT_OBJECTS)
+	{
+		std::cerr << "Ошибка: количество потоков не должно превышать " << MAXIMUM_WAIT_OBJECTS << std::endl;
 		return 1;
 	}
+
 	unsigned int* threadIds = new unsigned int[N];
 
 	InitializeCriticalSection(&cs);
 
+
 	HANDLE* handles = new HANDLE[N];
+
 	for (unsigned int i = 0; i < N; i++)
 	{
 		threadIds[i] = i + 1;
-		handles[i] = CreateThread(NULL, 0, &ThreadProc, &threadIds[i], 0, NULL);
+		handles[i] = CreateThread(NULL, 0, &ThreadProc, &threadIds[i], CREATE_SUSPENDED, NULL);
 	
 		if (handles[i] == NULL)
 		{
@@ -79,18 +88,21 @@ int _tmain(int argc, _TCHAR* argv[])
 				CloseHandle(handles[j]);
 			}
 			delete[] handles;
+			delete[] threadIds;
 
 			return 1;
 		}
 
 	}
 
-	for (unsigned int i = 0; i < N; i++)
+	for (int i = 0; i < N; i++)
 	{
 		ResumeThread(handles[i]);
 	}
 
 	WaitForMultipleObjects(N, handles, true, INFINITE);
+
+	DeleteCriticalSection(&cs);
 
 	for (unsigned int i = 0; i < N; i++)
 	{
@@ -98,6 +110,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	}
 
 	delete[] handles;
+	delete[] threadIds;
 
 	std::cout << "Все потоки завершили работу" << std::endl;
 	return 0;
