@@ -34,9 +34,9 @@ int _tmain(int argc, _TCHAR* argv[])
 	try 
 	{
 		int temp = std::stoi(argv[1]);
-		if (temp < 0)
+		if (temp <= 0)
 		{
-			std::cerr << "Ошибка: количество потоков не может быть отрицательным." << std::endl;
+			std::cerr << "Ошибка: количество потоков должно быть больше 0." << std::endl;
 			return 1;
 		}
 
@@ -55,11 +55,6 @@ int _tmain(int argc, _TCHAR* argv[])
 		return 1;
 	}
 
-	if (N == 0) 
-	{
-		std::cerr << "Ошибка: количество потоков должно быть больше 0." << std::endl;
-		return 1;
-	}
 
 	if (N > MAXIMUM_WAIT_OBJECTS)
 	{
@@ -95,7 +90,7 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	}
 
-	for (int i = 0; i < N; i++)
+	for (unsigned int i = 0; i < N; i++)
 	{
 		ResumeThread(handles[i]);
 	}
