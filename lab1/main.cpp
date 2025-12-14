@@ -7,77 +7,74 @@ CRITICAL_SECTION cs;
 
 DWORD WINAPI ThreadProc(CONST LPVOID lpParam)
 {
-	int threadNum = *(int*)lpParam;
+	int threadNum = *(int *)lpParam;
 
 	EnterCriticalSection(&cs);
 
-	std::cout << "Ïîòîê ¹" << threadNum << " âûïîëíÿåò ñâîþ ðàáîòó" << std::endl;
+	std::cout << "ÐŸÐ¾Ñ‚Ð¾Ðº â„–" << threadNum << " Ð²Ñ‹Ð¿Ð¾Ð»Ð½ÑÐµÑ‚ ÑÐ²Ð¾ÑŽ Ñ€Ð°Ð±Ð¾Ñ‚Ñƒ" << std::endl;
 
 	LeaveCriticalSection(&cs);
-
 
 	ExitThread(0);
 }
 
-int _tmain(int argc, _TCHAR* argv[])
+int _tmain(int argc, _TCHAR *argv[])
 {
 	setlocale(LC_ALL, "RU");
 
 	if (argc != 2)
 	{
-		std::cerr << "Îøèáêà, äëÿ çàïóñêà ïðîãðàììû èñïîëüçóéòå: program.exe <êîëè÷åñòâî_ïîòîêîâ>" << std::endl;
+		std::cerr << "ÐžÑˆÐ¸Ð±ÐºÐ°, Ð´Ð»Ñ Ð·Ð°Ð¿ÑƒÑÐºÐ° Ð¿Ñ€Ð¾Ð³Ñ€Ð°Ð¼Ð¼Ñ‹ Ð¸ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐ¹Ñ‚Ðµ: program.exe <ÐºÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾_Ð¿Ð¾Ñ‚Ð¾ÐºÐ¾Ð²>" << std::endl;
 		return 1;
 	}
 
 	unsigned int N = 0;
 
-	try 
+	try
 	{
 		int temp = std::stoi(argv[1]);
 		if (temp <= 0)
 		{
-			std::cerr << "Îøèáêà: êîëè÷åñòâî ïîòîêîâ äîëæíî áûòü áîëüøå 0." << std::endl;
+			std::cerr << "ÐžÑˆÐ¸Ð±ÐºÐ°: ÐºÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾ Ð¿Ð¾Ñ‚Ð¾ÐºÐ¾Ð² Ð´Ð¾Ð»Ð¶Ð½Ð¾ Ð±Ñ‹Ñ‚ÑŒ Ð±Ð¾Ð»ÑŒÑˆÐµ 0." << std::endl;
 			return 1;
 		}
 
 		N = static_cast<unsigned int>(temp);
 	}
 
-	catch (const std::invalid_argument&)
+	catch (const std::invalid_argument &)
 	{
-		std::cerr << "Îøèáêà: àðãóìåíò íå ÿâëÿåòñÿ ÷èñëîì." << std::endl;
+		std::cerr << "ÐžÑˆÐ¸Ð±ÐºÐ°: Ð°Ñ€Ð³ÑƒÐ¼ÐµÐ½Ñ‚ Ð½Ðµ ÑÐ²Ð»ÑÐµÑ‚ÑÑ Ñ‡Ð¸ÑÐ»Ð¾Ð¼." << std::endl;
 		return 1;
 	}
 
-	catch (const std::out_of_range&) 
+	catch (const std::out_of_range &)
 	{
-		std::cerr << "Îøèáêà: ñëèøêîì áîëüøîå ÷èñëî." << std::endl;
+		std::cerr << "ÐžÑˆÐ¸Ð±ÐºÐ°: ÑÐ»Ð¸ÑˆÐºÐ¾Ð¼ Ð±Ð¾Ð»ÑŒÑˆÐ¾Ðµ Ñ‡Ð¸ÑÐ»Ð¾." << std::endl;
 		return 1;
 	}
-
 
 	if (N > MAXIMUM_WAIT_OBJECTS)
 	{
-		std::cerr << "Îøèáêà: êîëè÷åñòâî ïîòîêîâ íå äîëæíî ïðåâûøàòü " << MAXIMUM_WAIT_OBJECTS << std::endl;
+		std::cerr << "ÐžÑˆÐ¸Ð±ÐºÐ°: ÐºÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾ Ð¿Ð¾Ñ‚Ð¾ÐºÐ¾Ð² Ð½Ðµ Ð´Ð¾Ð»Ð¶Ð½Ð¾ Ð¿Ñ€ÐµÐ²Ñ‹ÑˆÐ°Ñ‚ÑŒ " << MAXIMUM_WAIT_OBJECTS << std::endl;
 		return 1;
 	}
 
-	unsigned int* threadIds = new unsigned int[N];
+	unsigned int *threadIds = new unsigned int[N];
 
 	InitializeCriticalSection(&cs);
 
-
-	HANDLE* handles = new HANDLE[N];
+	HANDLE *handles = new HANDLE[N];
 
 	for (unsigned int i = 0; i < N; i++)
 	{
 		threadIds[i] = i + 1;
 		handles[i] = CreateThread(NULL, 0, &ThreadProc, &threadIds[i], CREATE_SUSPENDED, NULL);
-	
+
 		if (handles[i] == NULL)
 		{
-			std::cerr << "Îøèáêà ïðè ñîçäàíèè ïîòîêà " << (i + 1) << std::endl;
-			
+			std::cerr << "ÐžÑˆÐ¸Ð±ÐºÐ° Ð¿Ñ€Ð¸ ÑÐ¾Ð·Ð´Ð°Ð½Ð¸Ð¸ Ð¿Ð¾Ñ‚Ð¾ÐºÐ° " << (i + 1) << std::endl;
+
 			for (unsigned int j = 0; j < i; ++j)
 			{
 				CloseHandle(handles[j]);
@@ -87,7 +84,6 @@ int _tmain(int argc, _TCHAR* argv[])
 
 			return 1;
 		}
-
 	}
 
 	for (unsigned int i = 0; i < N; i++)
@@ -107,6 +103,6 @@ int _tmain(int argc, _TCHAR* argv[])
 	delete[] handles;
 	delete[] threadIds;
 
-	std::cout << "Âñå ïîòîêè çàâåðøèëè ðàáîòó" << std::endl;
+	std::cout << "Ð’ÑÐµ Ð¿Ð¾Ñ‚Ð¾ÐºÐ¸ Ð·Ð°Ð²ÐµÑ€ÑˆÐ¸Ð»Ð¸ Ñ€Ð°Ð±Ð¾Ñ‚Ñƒ" << std::endl;
 	return 0;
 }
