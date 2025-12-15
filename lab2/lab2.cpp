@@ -12,9 +12,10 @@
 
 using namespace std::chrono;
 
-struct Params 
+struct Params
 {
     Bitmap* in;
+    Bitmap* out;
     uint32_t startHeight;
     uint32_t endHeight;
     uint32_t startWidth;
@@ -22,7 +23,7 @@ struct Params
 };
 
 
-void Blur(int radius, Params* params) 
+void Blur(int radius, Params* params)
 {
     if (!params || !params->in) return;
 
@@ -30,23 +31,23 @@ void Blur(int radius, Params* params)
     int width = in->GetWidth();
     int height = in->GetHeight();
 
-    float rs = ceil(radius * 2.5f); 
+    float rs = ceil(radius * 2.5f);
     float sigma = radius / 2.0f;
     float sigmaSquare = sigma * sigma;
     float twoPiSigmaSquare = 2.0f * M_PI * sigmaSquare;
 
-    for (auto i = params->startHeight; i < params->endHeight; ++i) 
+    for (auto i = params->startHeight; i < params->endHeight; ++i)
     {
-        for (auto j = params->startWidth; j < params->endWidth; ++j) 
+        for (auto j = params->startWidth; j < params->endWidth; ++j)
         {
             double r = 0, g = 0, b = 0;
             double weightSum = 0;
 
             for (int iy = static_cast<int>(i) - static_cast<int>(rs);
-                iy <= static_cast<int>(i) + static_cast<int>(rs); ++iy) 
+                iy <= static_cast<int>(i) + static_cast<int>(rs); ++iy)
             {
                 for (int ix = static_cast<int>(j) - static_cast<int>(rs);
-                    ix <= static_cast<int>(j) + static_cast<int>(rs); ++ix) 
+                    ix <= static_cast<int>(j) + static_cast<int>(rs); ++ix)
                 {
 
                     int x = min(width - 1, max(0, ix));
@@ -58,7 +59,7 @@ void Blur(int radius, Params* params)
                     float weight = exp(-distanceSquare / (2.0f * sigmaSquare)) / twoPiSigmaSquare;
 
                     rgb32* pixel = params->in->GetPixel(x, y);
-                    if (!pixel) continue; 
+                    if (!pixel) continue;
 
                     r += pixel->r * weight;
                     g += pixel->g * weight;
@@ -70,7 +71,7 @@ void Blur(int radius, Params* params)
             if (weightSum > 0)
             {
                 rgb32* pixel = params->in->GetPixel(j, i);
-                if (pixel) 
+                if (pixel)
                 {
                     pixel->r = static_cast<uint8_t>(min(255.0, max(0.0, r / weightSum)));
                     pixel->g = static_cast<uint8_t>(min(255.0, max(0.0, g / weightSum)));
@@ -82,18 +83,18 @@ void Blur(int radius, Params* params)
 }
 
 
-DWORD WINAPI ThreadProc(LPVOID lpParam) 
+DWORD WINAPI ThreadProc(LPVOID lpParam)
 {
     Params* params = (Params*)lpParam;
     Blur(4, params);
     return 0;
 }
 
-HANDLE CreateThreadWithAffinity(Params* params, int threadIndex, int coresCount) 
+HANDLE CreateThreadWithAffinity(Params* params, int threadIndex, int coresCount)
 {
     HANDLE threadHandle = CreateThread(NULL, 0, &ThreadProc, params, CREATE_SUSPENDED, NULL);
 
-    if (threadHandle != NULL) 
+    if (threadHandle != NULL)
     {
         DWORD_PTR affinityMask = (static_cast<DWORD_PTR>(1) << (threadIndex % coresCount));
         SetThreadAffinityMask(threadHandle, affinityMask);
@@ -103,16 +104,16 @@ HANDLE CreateThreadWithAffinity(Params* params, int threadIndex, int coresCount)
     return threadHandle;
 }
 
-void WaitForAllThreads(HANDLE* handles, int threadsCount) 
+void WaitForAllThreads(HANDLE* handles, int threadsCount)
 {
     WaitForMultipleObjects(static_cast<DWORD>(threadsCount), handles, TRUE, INFINITE);
 }
 
-void CleanupThreadResources(HANDLE* handles, Params* params, int threadsCount) 
+void CleanupThreadResources(HANDLE* handles, Params* params, int threadsCount)
 {
-    for (int i = 0; i < threadsCount; i++) 
+    for (int i = 0; i < threadsCount; i++)
     {
-        if (handles[i] != NULL) 
+        if (handles[i] != NULL)
         {
             CloseHandle(handles[i]);
         }
@@ -121,7 +122,7 @@ void CleanupThreadResources(HANDLE* handles, Params* params, int threadsCount)
     delete[] params;
 }
 
-void SequentialBlur(Bitmap* in) 
+void SequentialBlur(Bitmap* in)
 {
     Params params;
     params.in = in;
@@ -133,7 +134,7 @@ void SequentialBlur(Bitmap* in)
     Blur(4, &params);
 }
 
-void ParallelBlur(Bitmap* in, int threadsCount, int coresCount) 
+void ParallelBlur(Bitmap* in, int threadsCount, int coresCount)
 {
     int height = in->GetHeight();
     int width = in->GetWidth();
@@ -145,7 +146,7 @@ void ParallelBlur(Bitmap* in, int threadsCount, int coresCount)
     HANDLE* handles = new HANDLE[threadsCount];
 
     int currentStart = 0;
-    for (int i = 0; i < threadsCount; i++) 
+    for (int i = 0; i < threadsCount; i++)
     {
         paramsArray[i].in = in;
         paramsArray[i].startWidth = 0;
@@ -153,7 +154,7 @@ void ParallelBlur(Bitmap* in, int threadsCount, int coresCount)
         paramsArray[i].startHeight = currentStart;
 
         int currentEnd = currentStart + partHeight;
-        if (i < heightRemaining) 
+        if (i < heightRemaining)
         {
             currentEnd++;
         }
@@ -162,17 +163,17 @@ void ParallelBlur(Bitmap* in, int threadsCount, int coresCount)
         currentStart = paramsArray[i].endHeight;
 
         handles[i] = CreateThreadWithAffinity(&paramsArray[i], i, coresCount);
-        if (!handles[i]) 
+        if (!handles[i])
         {
-            std::cerr << "Error: Failed to create thread " << i << std::endl;
+            std::cerr << "Ошибка: Не удалось создать поток " << i << std::endl;
 
-            for (int j = 0; j < i; j++) 
+            for (int j = 0; j < i; j++)
             {
                 if (handles[j]) CloseHandle(handles[j]);
             }
             delete[] handles;
             delete[] paramsArray;
-            throw std::runtime_error("Failed to create thread");
+            throw std::runtime_error("Не удалось создать поток");
         }
     }
 
@@ -181,48 +182,48 @@ void ParallelBlur(Bitmap* in, int threadsCount, int coresCount)
     CleanupThreadResources(handles, paramsArray, threadsCount);
 }
 
-void SetProcessCores(int coresCount) 
+void SetProcessCores(int coresCount)
 {
     SYSTEM_INFO sysInfo;
     GetSystemInfo(&sysInfo);
     int maxCores = sysInfo.dwNumberOfProcessors;
 
-    if (coresCount > maxCores) 
+    if (coresCount > maxCores)
     {
         coresCount = maxCores;
-        std::cout << "Warning: Requested " << coresCount << " cores, but system has only " << maxCores << std::endl;
+        std::cout << "Предупреждение: Запрошено " << coresCount << " ядер, но в системе только " << maxCores << std::endl;
     }
 
     DWORD_PTR processAffinityMask = (static_cast<DWORD_PTR>(1) << coresCount) - 1;
-    if (!SetProcessAffinityMask(GetCurrentProcess(), processAffinityMask)) 
+    if (!SetProcessAffinityMask(GetCurrentProcess(), processAffinityMask))
     {
-        std::cerr << "Warning: Failed to set process affinity mask" << std::endl;
+        std::cerr << "Предупреждение: Не удалось установить маску сходства процесса" << std::endl;
     }
 
-    std::cout << "Process limited to " << coresCount << " core(s)" << std::endl;
+    std::cout << "Процесс ограничен " << coresCount << " ядром(ами)" << std::endl;
 }
 
-int CalculateRequiredRepeats(long long durationMs) 
+int CalculateRequiredRepeats(long long durationMs)
 {
-    if (durationMs < 500) 
+    if (durationMs < 500)
     {
         return max(2, 500 / max(1, static_cast<int>(durationMs)));
     }
     return 1;
 }
 
-void PrintUsage(const char* programName) 
+void PrintUsage(const char* programName)
 {
-    std::cout << "Usage: " << programName << " <input.bmp> <output.bmp> <threads> <cores>" << std::endl;
-    std::cout << "  threads: 1 for sequential, >1 for parallel" << std::endl;
-    std::cout << "  cores: 1-4" << std::endl;
+    std::cout << "Использование: " << programName << " <input.bmp> <output.bmp> <потоки> <ядра>" << std::endl;
+    std::cout << "  потоки: 1 для последовательной обработки, >1 для параллельной" << std::endl;
+    std::cout << "  ядра: 1-4" << std::endl;
     std::cout << std::endl;
-    std::cout << "Example:" << std::endl;
-    std::cout << "  " << programName << " input.bmp output.bmp 1 1   (sequential)" << std::endl;
-    std::cout << "  " << programName << " input.bmp output.bmp 4 2   (parallel, 4 threads, 2 cores)" << std::endl;
+    std::cout << "Примеры:" << std::endl;
+    std::cout << "  " << programName << " input.bmp output.bmp 1 1   (последовательно)" << std::endl;
+    std::cout << "  " << programName << " input.bmp output.bmp 4 2   (параллельно, 4 потока, 2 ядра)" << std::endl;
 }
 
-bool ValidateArguments(int argc, char* argv[]) 
+bool ValidateArguments(int argc, char* argv[])
 {
 
     if (argc != 5)
@@ -231,18 +232,18 @@ bool ValidateArguments(int argc, char* argv[])
         return false;
     }
 
-    int threadsCount = atoi(argv[2]);
-    int coresCount = atoi(argv[3]);
+    int threadsCount = atoi(argv[3]);
+    int coresCount = atoi(argv[4]);
 
     if (threadsCount <= 0)
     {
-        std::cerr << "Error: Threads count must be positive" << std::endl;
+        std::cerr << "Ошибка: Количество потоков должно быть положительным" << std::endl;
         return false;
     }
 
     if (coresCount <= 0 || coresCount > 4)
     {
-        std::cerr << "Error: Cores count must be between 1 and 4" << std::endl;
+        std::cerr << "Ошибка: Количество ядер должно быть от 1 до 4" << std::endl;
         return false;
     }
 
@@ -250,14 +251,14 @@ bool ValidateArguments(int argc, char* argv[])
 }
 
 
-int main(int argc, char* argv[]) 
+int main(int argc, char* argv[])
 {
-    if (!ValidateArguments(argc, argv)) 
+    setlocale(LC_ALL, "RU");
+
+    if (!ValidateArguments(argc, argv))
     {
         return 1;
     }
-
-
     const char* inputFile = argv[1];
     const char* outputFile = argv[2];
     int threadsCount = atoi(argv[3]);
@@ -266,83 +267,87 @@ int main(int argc, char* argv[])
 
     auto startTime = high_resolution_clock::now();
 
-    try 
+    try
     {
-        std::cout << "=== Image Blur Processor ===" << std::endl;
-        std::cout << "Input file: " << inputFile << std::endl;
-        std::cout << "Output file: " << outputFile << std::endl;
-        std::cout << "Threads: " << threadsCount << std::endl;
-        std::cout << "Cores: " << coresCount << std::endl;
+        std::cout << "=== Обработчик размытия изображений ===" << std::endl;
+        std::cout << "Входной файл: " << inputFile << std::endl;
+        std::cout << "Выходной файл: " << outputFile << std::endl;
+        std::cout << "Потоки: " << threadsCount << std::endl;
+        std::cout << "Ядра: " << coresCount << std::endl;
 
         SetProcessCores(coresCount);
 
-        std::cout << "Loading image..." << std::endl;
+        std::cout << "Загрузка изображения..." << std::endl;
         Bitmap bmp(inputFile);
-        std::cout << "Image loaded. Size: " << bmp.GetWidth() << "x" << bmp.GetHeight() << std::endl;
+        std::cout << "Изображение загружено. Размер: " << bmp.GetWidth() << "x" << bmp.GetHeight() << std::endl;
 
-        std::cout << "Performing test run..." << std::endl;
+        std::cout << "Выполнение тестового запуска..." << std::endl;
         auto testStart = high_resolution_clock::now();
 
-        if (threadsCount == 1) 
+        if (threadsCount == 1)
         {
             SequentialBlur(&bmp);
+            std::cout << "Последовательный..." << std::endl;
         }
-        else 
+        else
         {
             ParallelBlur(&bmp, threadsCount, coresCount);
+            std::cout << "Параллельный..." << std::endl;
         }
 
         auto testEnd = high_resolution_clock::now();
         auto testDuration = duration_cast<milliseconds>(testEnd - testStart);
-        std::cout << "Test completed in " << testDuration.count() << " ms" << std::endl;
+        std::cout << "Тест выполнен за " << testDuration.count() << " мс" << std::endl;
 
         int repeats = CalculateRequiredRepeats(testDuration.count());
 
-        if (repeats > 1) 
+        if (repeats > 1)
         {
-            std::cout << "Test was too fast (" << testDuration.count() << "ms), applying blur "
-                << repeats << " times" << std::endl;
+            std::cout << "Тест был слишком быстрым (" << testDuration.count() << "мс), применяем размытие "
+                << repeats << " раз(а)" << std::endl;
 
             bmp = Bitmap(inputFile);
 
             auto blurStart = high_resolution_clock::now();
 
-            for (int i = 0; i < repeats; i++) 
+            for (int i = 0; i < repeats; i++)
             {
-                std::cout << "Blur iteration " << (i + 1) << " of " << repeats << std::endl;
-                if (threadsCount == 1) 
+                std::cout << "Итерация размытия " << (i + 1) << " из " << repeats << std::endl;
+                if (threadsCount == 1)
                 {
                     SequentialBlur(&bmp);
+                    std::cout << "Последовательный..." << std::endl;
                 }
-                else 
+                else
                 {
                     ParallelBlur(&bmp, threadsCount, coresCount);
+                    std::cout << "Параллельный..." << std::endl;
                 }
             }
 
             auto blurEnd = high_resolution_clock::now();
             auto blurTime = duration_cast<milliseconds>(blurEnd - blurStart);
-            std::cout << "All blur iterations completed in " << blurTime.count() << " ms" << std::endl;
+            std::cout << "Все итерации размытия выполнены за " << blurTime.count() << " мс" << std::endl;
         }
-        else 
+        else
         {
-            std::cout << "Single blur applied (duration: " << testDuration.count() << " ms)" << std::endl;
+            std::cout << "Применено однократное размытие (длительность: " << testDuration.count() << " мс)" << std::endl;
         }
 
-        std::cout << "Saving result to: " << outputFile << std::endl;
+        std::cout << "Сохранение результата в: " << outputFile << std::endl;
         bmp.Save(outputFile);
-        std::cout << "Image saved successfully" << std::endl;
+        std::cout << "Изображение успешно сохранено" << std::endl;
 
         auto endTime = high_resolution_clock::now();
         auto totalTime = duration_cast<milliseconds>(endTime - startTime);
 
-        std::cout << "\n=== Final Results ===" << std::endl;
-        std::cout << "Mode: " << (threadsCount == 1 ? "Sequential" : "Parallel") << std::endl;
-        std::cout << "Threads: " << threadsCount << std::endl;
-        std::cout << "Cores: " << coresCount << std::endl;
-        std::cout << "Total execution time: " << totalTime.count() << " ms" << std::endl;
+        std::cout << "\n=== Итоговые результаты ===" << std::endl;
+        std::cout << "Режим: " << (threadsCount == 1 ? "Последовательный" : "Параллельный") << std::endl;
+        std::cout << "Потоки: " << threadsCount << std::endl;
+        std::cout << "Ядра: " << coresCount << std::endl;
+        std::cout << "Общее время выполнения: " << totalTime.count() << " мс" << std::endl;
 
-        std::cout << "\n" << totalTime.count() << " ms" << std::endl;
+        std::cout << "\n" << totalTime.count() << " мс" << std::endl;
 
     }
     catch (const std::exception& e)
@@ -350,21 +355,21 @@ int main(int argc, char* argv[])
         auto endTime = high_resolution_clock::now();
         auto totalTime = duration_cast<milliseconds>(endTime - startTime);
 
-        std::cerr << "\nERROR: " << e.what() << std::endl;
-        std::cerr << "Program terminated after " << totalTime.count() << " ms" << std::endl;
+        std::cerr << "\nОШИБКА: " << e.what() << std::endl;
+        std::cerr << "Программа завершена через " << totalTime.count() << " мс" << std::endl;
 
-        std::cout << totalTime.count() << " ms" << std::endl;
+        std::cout << totalTime.count() << " мс" << std::endl;
         return 1;
     }
-    catch (...) 
+    catch (...)
     {
         auto endTime = high_resolution_clock::now();
         auto totalTime = duration_cast<milliseconds>(endTime - startTime);
 
-        std::cerr << "\nERROR: Unknown exception occurred" << std::endl;
-        std::cerr << "Program terminated after " << totalTime.count() << " ms" << std::endl;
+        std::cerr << "\nОШИБКА: Произошла неизвестная ошибка" << std::endl;
+        std::cerr << "Программа завершена через " << totalTime.count() << " мс" << std::endl;
 
-        std::cout << totalTime.count() << " ms" << std::endl;
+        std::cout << totalTime.count() << " мс" << std::endl;
         return 1;
     }
 
