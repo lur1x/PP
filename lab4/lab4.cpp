@@ -7,10 +7,16 @@
 #include <string>
 #include <vector>
 #include <windows.h>
+#include <sstream>
 #define _USE_MATH_DEFINES
 #include <math.h>
 
 using namespace std::chrono;
+
+// Глобальные переменные для логирования
+static std::vector<std::ofstream*> threadLogFiles;
+static CRITICAL_SECTION logCriticalSection;
+static auto programStartTime = high_resolution_clock::now();
 
 struct Params
 {
@@ -20,7 +26,23 @@ struct Params
     uint32_t endHeight;
     uint32_t startWidth;
     uint32_t endWidth;
+    int threadId;
+    int threadPriority;
 };
+
+// Функция для логирования времени обработки пикселя
+void LogPixelProcessing(int threadId, uint32_t x, uint32_t y)
+{
+    auto now = high_resolution_clock::now();
+    auto timeFromStart = duration_cast<milliseconds>(now - programStartTime).count();
+
+    if (threadId < threadLogFiles.size() && threadLogFiles[threadId])
+    {
+        EnterCriticalSection(&logCriticalSection);
+        *threadLogFiles[threadId] << timeFromStart << "," << x << "," << y << "\n";
+        LeaveCriticalSection(&logCriticalSection);
+    }
+}
 
 void Blur(int radius, Params* params)
 {
@@ -76,7 +98,10 @@ void Blur(int radius, Params* params)
                     dstPixel->r = static_cast<uint8_t>(min(255.0, max(0.0, r / weightSum)));
                     dstPixel->g = static_cast<uint8_t>(min(255.0, max(0.0, g / weightSum)));
                     dstPixel->b = static_cast<uint8_t>(min(255.0, max(0.0, b / weightSum)));
-                    dstPixel->a = srcPixel->a; 
+                    dstPixel->a = srcPixel->a;
+
+                    // Логирование времени обработки пикселя
+                    LogPixelProcessing(params->threadId, j, i);
                 }
             }
         }
@@ -86,11 +111,18 @@ void Blur(int radius, Params* params)
 DWORD WINAPI ThreadProc(LPVOID lpParam)
 {
     Params* params = (Params*)lpParam;
+
+    // Устанавливаем приоритет потока
+    if (!SetThreadPriority(GetCurrentThread(), params->threadPriority))
+    {
+        std::cerr << "Ошибка: Не удалось установить приоритет для потока " << params->threadId << std::endl;
+    }
+
     Blur(4, params);
     return 0;
 }
 
-HANDLE CreateThreadWithAffinity(Params* params, int threadIndex, int coresCount)
+HANDLE CreateThreadWithAffinity(Params* params, int threadIndex, int coresCount, int threadPriority)
 {
     HANDLE threadHandle = CreateThread(NULL, 0, &ThreadProc, params, CREATE_SUSPENDED, NULL);
 
@@ -98,6 +130,10 @@ HANDLE CreateThreadWithAffinity(Params* params, int threadIndex, int coresCount)
     {
         DWORD_PTR affinityMask = (static_cast<DWORD_PTR>(1) << (threadIndex % coresCount));
         SetThreadAffinityMask(threadHandle, affinityMask);
+
+        // Устанавливаем приоритет
+        params->threadPriority = threadPriority;
+
         ResumeThread(threadHandle);
     }
 
@@ -122,8 +158,54 @@ void CleanupThreadResources(HANDLE* handles, Params* params, int threadsCount)
     delete[] params;
 }
 
+// Функция для создания лог-файлов для каждого потока
+void CreateThreadLogFiles(int threadsCount)
+{
+    threadLogFiles.clear();
+    threadLogFiles.resize(threadsCount);
+
+    for (int i = 0; i < threadsCount; i++)
+    {
+        std::string filename = "../../thread_" + std::to_string(i) + "_log.csv";
+        threadLogFiles[i] = new std::ofstream(filename);
+        if (!threadLogFiles[i]->is_open())
+        {
+            std::cerr << "Ошибка: Не удалось создать файл лога для потока " << i << std::endl;
+            continue;
+        }
+
+        // Заголовок CSV файла
+        *threadLogFiles[i] << "TimeMs,X,Y\n";
+    }
+}
+
+// Функция для закрытия лог-файлов
+void CloseThreadLogFiles()
+{
+    for (size_t i = 0; i < threadLogFiles.size(); i++)
+    {
+        if (threadLogFiles[i])
+        {
+            threadLogFiles[i]->close();
+            delete threadLogFiles[i];
+            threadLogFiles[i] = nullptr;
+        }
+    }
+    threadLogFiles.clear();
+}
+
 void SequentialBlur(Bitmap* in, Bitmap* out)
 {
+    // Создаем файл для основного потока (поток 0)
+    if (threadLogFiles.empty())
+    {
+        threadLogFiles.push_back(new std::ofstream("thread_0_log.csv"));
+        if (threadLogFiles[0])
+        {
+            *threadLogFiles[0] << "TimeMs,X,Y\n";
+        }
+    }
+
     Params params;
     params.in = in;
     params.out = out;
@@ -131,11 +213,13 @@ void SequentialBlur(Bitmap* in, Bitmap* out)
     params.endWidth = in->GetWidth();
     params.startHeight = 0;
     params.endHeight = in->GetHeight();
+    params.threadId = 0; // Основной поток
+    params.threadPriority = THREAD_PRIORITY_NORMAL;
 
     Blur(4, &params);
 }
 
-void ParallelBlur(Bitmap* in, Bitmap* out, int threadsCount, int coresCount)
+void ParallelBlur(Bitmap* in, Bitmap* out, int threadsCount, int coresCount, const std::vector<int>& threadPriorities)
 {
     int height = in->GetHeight();
     int width = in->GetWidth();
@@ -154,6 +238,7 @@ void ParallelBlur(Bitmap* in, Bitmap* out, int threadsCount, int coresCount)
         paramsArray[i].startWidth = 0;
         paramsArray[i].endWidth = width;
         paramsArray[i].startHeight = currentStart;
+        paramsArray[i].threadId = i;
 
         int currentEnd = currentStart + partHeight;
         if (i < heightRemaining)
@@ -164,7 +249,14 @@ void ParallelBlur(Bitmap* in, Bitmap* out, int threadsCount, int coresCount)
 
         currentStart = paramsArray[i].endHeight;
 
-        handles[i] = CreateThreadWithAffinity(&paramsArray[i], i, coresCount);
+        // Получаем приоритет для потока
+        int priority = THREAD_PRIORITY_NORMAL;
+        if (i < threadPriorities.size())
+        {
+            priority = threadPriorities[i];
+        }
+
+        handles[i] = CreateThreadWithAffinity(&paramsArray[i], i, coresCount, priority);
         if (!handles[i])
         {
             std::cerr << "Ошибка: Не удалось создать поток " << i << std::endl;
@@ -221,7 +313,7 @@ void SetProcessCores(int coresCount)
 
 int CalculateRequiredRepeats(long long durationMs)
 {
-    if (durationMs < 500)  
+    if (durationMs < 500)
     {
         return max(2, 500 / max(1, static_cast<int>(durationMs)));
     }
@@ -230,18 +322,76 @@ int CalculateRequiredRepeats(long long durationMs)
 
 void PrintUsage(const char* programName)
 {
-    std::cout << "Использование: " << programName << " <input.bmp> <output.bmp> <потоки> <ядра>" << std::endl;
-    std::cout << "  потоки: 1 для последовательной обработки, >1 для параллельной" << std::endl;
-    std::cout << "  ядра: 1-4" << std::endl;
+    std::cout << "Использование: " << programName << " <input.bmp> <output.bmp> <потоки> <ядра> [приоритеты]" << std::endl;
+    std::cout << "  input.bmp   - входной файл изображения" << std::endl;
+    std::cout << "  output.bmp  - выходной файл изображения" << std::endl;
+    std::cout << "  потоки      - количество потоков (1 для последовательной обработки)" << std::endl;
+    std::cout << "  ядра        - количество ядер (1-4)" << std::endl;
+    std::cout << "  приоритеты  - список приоритетов потоков через запятую (опционально)" << std::endl;
+    std::cout << "                Доступные приоритеты: idle, lowest, below_normal, normal," << std::endl;
+    std::cout << "                above_normal, highest, time_critical" << std::endl;
     std::cout << std::endl;
     std::cout << "Примеры:" << std::endl;
-    std::cout << "  " << programName << " input.bmp output.bmp 1 1   (последовательно)" << std::endl;
-    std::cout << "  " << programName << " input.bmp output.bmp 4 2   (параллельно, 4 потока, 2 ядра)" << std::endl;
+    std::cout << "  " << programName << " input.bmp output.bmp 1 1" << std::endl;
+    std::cout << "  " << programName << " input.bmp output.bmp 4 2" << std::endl;
+    std::cout << "  " << programName << " input.bmp output.bmp 3 1 above_normal,normal,normal" << std::endl;
+    std::cout << "  " << programName << " input.bmp output.bmp 3 1 above_normal,normal,below_normal" << std::endl;
+}
+
+// Функция для преобразования строки приоритета в значение Windows
+int ParseThreadPriority(const std::string& priorityStr)
+{
+    if (priorityStr == "idle") return THREAD_PRIORITY_IDLE;
+    if (priorityStr == "lowest") return THREAD_PRIORITY_LOWEST;
+    if (priorityStr == "below_normal") return THREAD_PRIORITY_BELOW_NORMAL;
+    if (priorityStr == "normal") return THREAD_PRIORITY_NORMAL;
+    if (priorityStr == "above_normal") return THREAD_PRIORITY_ABOVE_NORMAL;
+    if (priorityStr == "highest") return THREAD_PRIORITY_HIGHEST;
+    if (priorityStr == "time_critical") return THREAD_PRIORITY_TIME_CRITICAL;
+
+    return THREAD_PRIORITY_NORMAL; // по умолчанию
+}
+
+// Функция для парсинга списка приоритетов
+std::vector<int> ParsePriorities(const std::string& prioritiesStr)
+{
+    std::vector<int> priorities;
+    std::stringstream ss(prioritiesStr);
+    std::string priority;
+
+    while (std::getline(ss, priority, ','))
+    {
+        priorities.push_back(ParseThreadPriority(priority));
+    }
+
+    return priorities;
+}
+
+// Функция для получения имени приоритета
+std::string GetPriorityName(int priority)
+{
+    switch (priority)
+    {
+    case THREAD_PRIORITY_IDLE: return "idle";
+    case THREAD_PRIORITY_LOWEST: return "lowest";
+    case THREAD_PRIORITY_BELOW_NORMAL: return "below_normal";
+    case THREAD_PRIORITY_NORMAL: return "normal";
+    case THREAD_PRIORITY_ABOVE_NORMAL: return "above_normal";
+    case THREAD_PRIORITY_HIGHEST: return "highest";
+    case THREAD_PRIORITY_TIME_CRITICAL: return "time_critical";
+    default: return "unknown";
+    }
 }
 
 bool ValidateArguments(int argc, char* argv[])
 {
-    if (argc != 5)
+    if (argc == 2 && std::string(argv[1]) == "/?")
+    {
+        PrintUsage(argv[0]);
+        return false;
+    }
+
+    if (argc != 5 && argc != 6)
     {
         PrintUsage(argv[0]);
         return false;
@@ -269,8 +419,14 @@ int main(int argc, char* argv[])
 {
     setlocale(LC_ALL, "RU");
 
+    // Инициализация критической секции
+    InitializeCriticalSection(&logCriticalSection);
+
+    programStartTime = high_resolution_clock::now();
+
     if (!ValidateArguments(argc, argv))
     {
+        DeleteCriticalSection(&logCriticalSection);
         return 1;
     }
 
@@ -278,6 +434,21 @@ int main(int argc, char* argv[])
     const char* outputFile = argv[2];
     int threadsCount = atoi(argv[3]);
     int coresCount = atoi(argv[4]);
+
+    // Парсинг приоритетов потоков (если указаны)
+    std::vector<int> threadPriorities;
+    if (argc == 6)
+    {
+        threadPriorities = ParsePriorities(argv[5]);
+    }
+    else
+    {
+        // По умолчанию все потоки с нормальным приоритетом
+        for (int i = 0; i < threadsCount; i++)
+        {
+            threadPriorities.push_back(THREAD_PRIORITY_NORMAL);
+        }
+    }
 
     auto startTime = high_resolution_clock::now();
 
@@ -289,7 +460,26 @@ int main(int argc, char* argv[])
         std::cout << "Потоки: " << threadsCount << std::endl;
         std::cout << "Ядра: " << coresCount << std::endl;
 
+        if (!threadPriorities.empty())
+        {
+            std::cout << "Приоритеты потоков: ";
+            for (size_t i = 0; i < threadPriorities.size(); i++)
+            {
+                std::cout << "Поток " << i << ": " << GetPriorityName(threadPriorities[i])
+                    << (i < threadPriorities.size() - 1 ? ", " : "");
+            }
+            std::cout << std::endl;
+        }
+
         SetProcessCores(coresCount);
+
+        // Создаем лог-файлы для потоков
+        CreateThreadLogFiles(threadsCount);
+        std::cout << "Созданы лог-файлы для " << threadsCount << " потоков:" << std::endl;
+        for (int i = 0; i < threadsCount; i++)
+        {
+            std::cout << "  thread_" << i << "_log.csv" << std::endl;
+        }
 
         std::cout << "Загрузка изображения..." << std::endl;
         Bitmap* originalBmp = new Bitmap(inputFile);
@@ -309,7 +499,7 @@ int main(int argc, char* argv[])
         }
         else
         {
-            ParallelBlur(workingBmp, outputBmp, threadsCount, coresCount);
+            ParallelBlur(workingBmp, outputBmp, threadsCount, coresCount, threadPriorities);
             std::cout << "Параллельный режим завершен" << std::endl;
         }
 
@@ -343,7 +533,7 @@ int main(int argc, char* argv[])
                 }
                 else
                 {
-                    ParallelBlur(workingBmp, outputBmp, threadsCount, coresCount);
+                    ParallelBlur(workingBmp, outputBmp, threadsCount, coresCount, threadPriorities);
                     std::cout << "Параллельный режим завершен" << std::endl;
                 }
 
@@ -374,6 +564,13 @@ int main(int argc, char* argv[])
         std::cout << "Ядра: " << coresCount << std::endl;
         std::cout << "Общее время выполнения: " << totalTime.count() << " мс" << std::endl;
 
+        std::cout << "\nДанные для графиков сохранены в отдельных файлах:" << std::endl;
+        for (int i = 0; i < threadsCount; i++)
+        {
+            std::cout << "  thread_" << i << "_log.csv" << std::endl;
+        }
+        std::cout << "Формат данных в каждом файле: Время(мс), X координата, Y координата" << std::endl;
+
         std::cout << "\n" << totalTime.count() << " мс" << std::endl;
 
         delete originalBmp;
@@ -390,6 +587,9 @@ int main(int argc, char* argv[])
         std::cerr << "Программа завершена через " << totalTime.count() << " мс" << std::endl;
 
         std::cout << totalTime.count() << " мс" << std::endl;
+
+        DeleteCriticalSection(&logCriticalSection);
+        CloseThreadLogFiles();
         return 1;
     }
     catch (...)
@@ -401,8 +601,15 @@ int main(int argc, char* argv[])
         std::cerr << "Программа завершена через " << totalTime.count() << " мс" << std::endl;
 
         std::cout << totalTime.count() << " мс" << std::endl;
+
+        DeleteCriticalSection(&logCriticalSection);
+        CloseThreadLogFiles();
         return 1;
     }
+
+    // Завершение логирования
+    CloseThreadLogFiles();
+    DeleteCriticalSection(&logCriticalSection);
 
     return 0;
 }
