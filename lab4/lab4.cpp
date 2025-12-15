@@ -13,7 +13,6 @@
 
 using namespace std::chrono;
 
-// Глобальные переменные для логирования
 static std::vector<std::ofstream*> threadLogFiles;
 static CRITICAL_SECTION logCriticalSection;
 static auto programStartTime = high_resolution_clock::now();
@@ -30,7 +29,6 @@ struct Params
     int threadPriority;
 };
 
-// Функция для логирования времени обработки пикселя
 void LogPixelProcessing(int threadId, uint32_t x, uint32_t y)
 {
     auto now = high_resolution_clock::now();
@@ -100,7 +98,6 @@ void Blur(int radius, Params* params)
                     dstPixel->b = static_cast<uint8_t>(min(255.0, max(0.0, b / weightSum)));
                     dstPixel->a = srcPixel->a;
 
-                    // Логирование времени обработки пикселя
                     LogPixelProcessing(params->threadId, j, i);
                 }
             }
@@ -112,7 +109,6 @@ DWORD WINAPI ThreadProc(LPVOID lpParam)
 {
     Params* params = (Params*)lpParam;
 
-    // Устанавливаем приоритет потока
     if (!SetThreadPriority(GetCurrentThread(), params->threadPriority))
     {
         std::cerr << "Ошибка: Не удалось установить приоритет для потока " << params->threadId << std::endl;
@@ -131,7 +127,6 @@ HANDLE CreateThreadWithAffinity(Params* params, int threadIndex, int coresCount,
         DWORD_PTR affinityMask = (static_cast<DWORD_PTR>(1) << (threadIndex % coresCount));
         SetThreadAffinityMask(threadHandle, affinityMask);
 
-        // Устанавливаем приоритет
         params->threadPriority = threadPriority;
 
         ResumeThread(threadHandle);
@@ -158,7 +153,6 @@ void CleanupThreadResources(HANDLE* handles, Params* params, int threadsCount)
     delete[] params;
 }
 
-// Функция для создания лог-файлов для каждого потока
 void CreateThreadLogFiles(int threadsCount)
 {
     threadLogFiles.clear();
@@ -166,7 +160,7 @@ void CreateThreadLogFiles(int threadsCount)
 
     for (int i = 0; i < threadsCount; i++)
     {
-        std::string filename = "../../thread_" + std::to_string(i) + "_log.csv";
+        std::string filename = "../../results/thread_" + std::to_string(i) + "_log.csv";
         threadLogFiles[i] = new std::ofstream(filename);
         if (!threadLogFiles[i]->is_open())
         {
@@ -174,12 +168,10 @@ void CreateThreadLogFiles(int threadsCount)
             continue;
         }
 
-        // Заголовок CSV файла
         *threadLogFiles[i] << "TimeMs,X,Y\n";
     }
 }
 
-// Функция для закрытия лог-файлов
 void CloseThreadLogFiles()
 {
     for (size_t i = 0; i < threadLogFiles.size(); i++)
@@ -196,7 +188,6 @@ void CloseThreadLogFiles()
 
 void SequentialBlur(Bitmap* in, Bitmap* out)
 {
-    // Создаем файл для основного потока (поток 0)
     if (threadLogFiles.empty())
     {
         threadLogFiles.push_back(new std::ofstream("thread_0_log.csv"));
@@ -249,7 +240,6 @@ void ParallelBlur(Bitmap* in, Bitmap* out, int threadsCount, int coresCount, con
 
         currentStart = paramsArray[i].endHeight;
 
-        // Получаем приоритет для потока
         int priority = THREAD_PRIORITY_NORMAL;
         if (i < threadPriorities.size())
         {
@@ -338,7 +328,6 @@ void PrintUsage(const char* programName)
     std::cout << "  " << programName << " input.bmp output.bmp 3 1 above_normal,normal,below_normal" << std::endl;
 }
 
-// Функция для преобразования строки приоритета в значение Windows
 int ParseThreadPriority(const std::string& priorityStr)
 {
     if (priorityStr == "idle") return THREAD_PRIORITY_IDLE;
@@ -349,10 +338,9 @@ int ParseThreadPriority(const std::string& priorityStr)
     if (priorityStr == "highest") return THREAD_PRIORITY_HIGHEST;
     if (priorityStr == "time_critical") return THREAD_PRIORITY_TIME_CRITICAL;
 
-    return THREAD_PRIORITY_NORMAL; // по умолчанию
+    return THREAD_PRIORITY_NORMAL; 
 }
 
-// Функция для парсинга списка приоритетов
 std::vector<int> ParsePriorities(const std::string& prioritiesStr)
 {
     std::vector<int> priorities;
@@ -367,7 +355,6 @@ std::vector<int> ParsePriorities(const std::string& prioritiesStr)
     return priorities;
 }
 
-// Функция для получения имени приоритета
 std::string GetPriorityName(int priority)
 {
     switch (priority)
@@ -419,7 +406,6 @@ int main(int argc, char* argv[])
 {
     setlocale(LC_ALL, "RU");
 
-    // Инициализация критической секции
     InitializeCriticalSection(&logCriticalSection);
 
     programStartTime = high_resolution_clock::now();
@@ -435,7 +421,6 @@ int main(int argc, char* argv[])
     int threadsCount = atoi(argv[3]);
     int coresCount = atoi(argv[4]);
 
-    // Парсинг приоритетов потоков (если указаны)
     std::vector<int> threadPriorities;
     if (argc == 6)
     {
@@ -443,7 +428,6 @@ int main(int argc, char* argv[])
     }
     else
     {
-        // По умолчанию все потоки с нормальным приоритетом
         for (int i = 0; i < threadsCount; i++)
         {
             threadPriorities.push_back(THREAD_PRIORITY_NORMAL);
@@ -473,7 +457,6 @@ int main(int argc, char* argv[])
 
         SetProcessCores(coresCount);
 
-        // Создаем лог-файлы для потоков
         CreateThreadLogFiles(threadsCount);
         std::cout << "Созданы лог-файлы для " << threadsCount << " потоков:" << std::endl;
         for (int i = 0; i < threadsCount; i++)
@@ -607,7 +590,6 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    // Завершение логирования
     CloseThreadLogFiles();
     DeleteCriticalSection(&logCriticalSection);
 
