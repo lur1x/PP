@@ -222,31 +222,47 @@ void PrintUsage(const char* programName)
     std::cout << "  " << programName << " input.bmp output.bmp 4 2   (parallel, 4 threads, 2 cores)" << std::endl;
 }
 
+bool ValidateArguments(int argc, char* argv[]) 
+{
+
+    if (argc != 5)
+    {
+        PrintUsage(argv[0]);
+        return false;
+    }
+
+    int threadsCount = atoi(argv[2]);
+    int coresCount = atoi(argv[3]);
+
+    if (threadsCount <= 0)
+    {
+        std::cerr << "Error: Threads count must be positive" << std::endl;
+        return false;
+    }
+
+    if (coresCount <= 0 || coresCount > 4)
+    {
+        std::cerr << "Error: Cores count must be between 1 and 4" << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
 
 int main(int argc, char* argv[]) 
 {
-    if (argc != 5) 
+    if (!ValidateArguments(argc, argv)) 
     {
-        PrintUsage(argv[0]);
         return 1;
     }
+
 
     const char* inputFile = argv[1];
     const char* outputFile = argv[2];
     int threadsCount = atoi(argv[3]);
     int coresCount = atoi(argv[4]);
 
-    if (threadsCount <= 0) 
-    {
-        std::cerr << "Error: Threads count must be positive" << std::endl;
-        return 1;
-    }
-
-    if (coresCount <= 0 || coresCount > 4)
-    {
-        std::cerr << "Error: Cores count must be between 1 and 4" << std::endl;
-        return 1;
-    }
 
     auto startTime = high_resolution_clock::now();
 
