@@ -29,7 +29,7 @@ struct Params
     int threadPriority;
 };
 
-void LogPixelProcessing(int threadId, uint32_t x, uint32_t y)
+void LogRowProcessing(int threadId, uint32_t row)
 {
     auto now = high_resolution_clock::now();
     auto timeFromStart = duration_cast<milliseconds>(now - programStartTime).count();
@@ -37,7 +37,7 @@ void LogPixelProcessing(int threadId, uint32_t x, uint32_t y)
     if (threadId < threadLogFiles.size() && threadLogFiles[threadId])
     {
         EnterCriticalSection(&logCriticalSection);
-        *threadLogFiles[threadId] << timeFromStart << "," << x << "," << y << "\n";
+        *threadLogFiles[threadId] << timeFromStart << "," << row << "\n";
         LeaveCriticalSection(&logCriticalSection);
     }
 }
@@ -56,8 +56,16 @@ void Blur(int radius, Params* params)
     float sigmaSquare = sigma * sigma;
     float twoPiSigmaSquare = 2.0f * M_PI * sigmaSquare;
 
+    static thread_local int lastLoggedRow = -1;
+
     for (auto i = params->startHeight; i < params->endHeight; ++i)
     {
+        if (i % 5 == 0 && i != lastLoggedRow)
+        {
+            LogRowProcessing(params->threadId, i);
+            lastLoggedRow = i;
+        }
+
         for (auto j = params->startWidth; j < params->endWidth; ++j)
         {
             double r = 0, g = 0, b = 0;
@@ -97,8 +105,6 @@ void Blur(int radius, Params* params)
                     dstPixel->g = static_cast<uint8_t>(min(255.0, max(0.0, g / weightSum)));
                     dstPixel->b = static_cast<uint8_t>(min(255.0, max(0.0, b / weightSum)));
                     dstPixel->a = srcPixel->a;
-
-                    LogPixelProcessing(params->threadId, j, i);
                 }
             }
         }
@@ -168,7 +174,7 @@ void CreateThreadLogFiles(int threadsCount)
             continue;
         }
 
-        *threadLogFiles[i] << "TimeMs,X,Y\n";
+        *threadLogFiles[i] << "TimeMs,Row\n";
     }
 }
 
@@ -190,10 +196,10 @@ void SequentialBlur(Bitmap* in, Bitmap* out)
 {
     if (threadLogFiles.empty())
     {
-        threadLogFiles.push_back(new std::ofstream("thread_0_log.csv"));
+        threadLogFiles.push_back(new std::ofstream("../../results/thread_0_log.csv"));
         if (threadLogFiles[0])
         {
-            *threadLogFiles[0] << "TimeMs,X,Y\n";
+            *threadLogFiles[0] << "TimeMs,Row\n";
         }
     }
 
@@ -204,7 +210,7 @@ void SequentialBlur(Bitmap* in, Bitmap* out)
     params.endWidth = in->GetWidth();
     params.startHeight = 0;
     params.endHeight = in->GetHeight();
-    params.threadId = 0; // Основной поток
+    params.threadId = 0;
     params.threadPriority = THREAD_PRIORITY_NORMAL;
 
     Blur(4, &params);
@@ -303,9 +309,9 @@ void SetProcessCores(int coresCount)
 
 int CalculateRequiredRepeats(long long durationMs)
 {
-    if (durationMs < 500)
+    if (durationMs < 50)
     {
-        return max(2, 500 / max(1, static_cast<int>(durationMs)));
+        return max(2, 200 / max(1, static_cast<int>(durationMs)));
     }
     return 1;
 }
@@ -338,7 +344,7 @@ int ParseThreadPriority(const std::string& priorityStr)
     if (priorityStr == "highest") return THREAD_PRIORITY_HIGHEST;
     if (priorityStr == "time_critical") return THREAD_PRIORITY_TIME_CRITICAL;
 
-    return THREAD_PRIORITY_NORMAL; 
+    return THREAD_PRIORITY_NORMAL;
 }
 
 std::vector<int> ParsePriorities(const std::string& prioritiesStr)
@@ -464,6 +470,8 @@ int main(int argc, char* argv[])
             std::cout << "  thread_" << i << "_log.csv" << std::endl;
         }
 
+        std::cout << "Логирование: каждые 10 строк" << std::endl;
+
         std::cout << "Загрузка изображения..." << std::endl;
         Bitmap* originalBmp = new Bitmap(inputFile);
         std::cout << "Изображение загружено. Размер: " << originalBmp->GetWidth() << "x" << originalBmp->GetHeight() << std::endl;
@@ -552,7 +560,7 @@ int main(int argc, char* argv[])
         {
             std::cout << "  thread_" << i << "_log.csv" << std::endl;
         }
-        std::cout << "Формат данных в каждом файле: Время(мс), X координата, Y координата" << std::endl;
+        std::cout << "Формат данных в каждом файле: Время(мс), Номер строки" << std::endl;
 
         std::cout << "\n" << totalTime.count() << " мс" << std::endl;
 
