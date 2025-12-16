@@ -4,9 +4,14 @@
 #include "tchar.h"
 #include <fstream>
 
+const int DEPOSIT_AMOUNT = 230;
+const int WITHDRAW_AMOUNT = 1000;
+
+
 CRITICAL_SECTION FileLockingCriticalSection;
 
-int ReadFromFile() {
+int ReadFromFile() 
+{
 	EnterCriticalSection(&FileLockingCriticalSection);
 	std::fstream myfile("balance.txt", std::ios_base::in);
 	int result;
@@ -17,7 +22,8 @@ int ReadFromFile() {
 	return result;
 }
 
-void WriteToFile(int data) {
+void WriteToFile(int data) 
+{
 	EnterCriticalSection(&FileLockingCriticalSection);
 	std::fstream myfile("balance.txt", std::ios_base::out);
 	myfile << data << std::endl;
@@ -25,12 +31,13 @@ void WriteToFile(int data) {
 	LeaveCriticalSection(&FileLockingCriticalSection);
 }
 
-int GetBalance() {
-	int balance = ReadFromFile();
-	return balance;
+int GetBalance() 
+{
+	return ReadFromFile();
 }
 
-void Deposit(int money) {
+void Deposit(int money) 
+{
 	int balance = GetBalance();
 	balance += money;
 
@@ -38,8 +45,10 @@ void Deposit(int money) {
 	printf("Balance after deposit: %d\n", balance);
 }
 
-void Withdraw(int money) {
-	if (GetBalance() < money) {
+void Withdraw(int money) 
+{
+	if (GetBalance() < money) 
+	{
 		printf("Cannot withdraw money, balance lower than %d\n", money);
 		return;
 	}
@@ -74,13 +83,11 @@ int _tmain(int argc, _TCHAR* argv[])
 	SetProcessAffinityMask(GetCurrentProcess(), 1);
 	for (int i = 0; i < 50; i++) {
 		handles[i] = (i % 2 == 0)
-			? CreateThread(NULL, 0, &DoDeposit, (LPVOID)230, CREATE_SUSPENDED, NULL)
-			: CreateThread(NULL, 0, &DoWithdraw, (LPVOID)1000, CREATE_SUSPENDED, NULL);
+			? CreateThread(NULL, 0, &DoDeposit, (LPVOID)DEPOSIT_AMOUNT, CREATE_SUSPENDED, NULL)
+			: CreateThread(NULL, 0, &DoWithdraw, (LPVOID)WITHDRAW_AMOUNT, CREATE_SUSPENDED, NULL);
 		ResumeThread(handles[i]);
 	}
 
-
-	// ожидание окончания работы двух потоков
 	WaitForMultipleObjects(50, handles, true, INFINITE);
 	printf("Final Balance: %d\n", GetBalance());
 
