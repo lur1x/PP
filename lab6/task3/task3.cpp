@@ -3,6 +3,7 @@
 #include <random>
 #include <chrono>
 #include <iomanip>
+#include <sstream>
 #include <omp.h>
 
 using Matrix = std::vector<std::vector<double>>;
@@ -82,10 +83,49 @@ bool VerifyResults(const Matrix& C1, const Matrix& C2, double epsilon = 1e-6)
     return true;
 }
 
+Matrix ReadMatrix(std::istream& input)
+{
+    Matrix matrix;
+    std::string line;
+
+    while (std::getline(input, line))
+    {
+        if (line.empty())
+        {
+            continue;
+        }
+
+        std::vector<double> row;
+        std::istringstream iss(line);
+        double value;
+
+        while (iss >> value)
+        {
+            row.push_back(value);
+        }
+
+        matrix.push_back(row);
+    }
+
+    return matrix;
+}
+
+static void PrintMatrix(std::ostream& output, const Matrix& matrix)
+{
+    for (int i = 0; i < matrix.size(); i++)
+    {
+        for (int j = 0; j < matrix[i].size(); j++)
+        {
+            output << matrix[i][j] << "\t";
+        }
+        output << std::endl;
+    }
+}
+
 int main()
 {
     setlocale(LC_ALL, "RU");
-    const int n = 50;
+    const int n = 5;
     const int numThreads = omp_get_max_threads();
 
     std::cout << "=== Параллельное умножение матриц ===\n";
@@ -97,12 +137,20 @@ int main()
     auto A = GenerateRandomMatrix(n);
     auto B = GenerateRandomMatrix(n);
 
+    std::cout << "\nМатрица A" << std::endl;
+    PrintMatrix(std::cout, A);
+
+    std::cout << "\nМатрица B" << std::endl;
+    PrintMatrix(std::cout, B);
+
     std::cout << "\nПоследовательное умножение...\n";
     auto start = std::chrono::high_resolution_clock::now();
     auto C_seq = MultiplyMatricesSequential(A, B);
     auto end = std::chrono::high_resolution_clock::now();
     auto seq_time = std::chrono::duration<double>(end - start).count();
     std::cout << "Время: " << seq_time << " сек\n";
+
+    PrintMatrix(std::cout, C_seq);
 
     std::cout << "\nПараллельное умножение (распараллеливание по строкам)...\n";
     start = std::chrono::high_resolution_clock::now();
@@ -111,6 +159,7 @@ int main()
     auto par_row_time = std::chrono::duration<double>(end - start).count();
     std::cout << "Время: " << par_row_time << " сек\n";
 
+    PrintMatrix(std::cout, C_par_row);
 
     std::cout << "\nПроверка корректности...\n";
     bool valid_row = VerifyResults(C_seq, C_par_row);
