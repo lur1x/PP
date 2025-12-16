@@ -9,14 +9,18 @@ const int WITHDRAW_AMOUNT = 1000;
 
 
 CRITICAL_SECTION FileLockingCriticalSection;
+CRITICAL_SECTION BalanceCriticalSection;
 
 int ReadFromFile() 
 {
 	EnterCriticalSection(&FileLockingCriticalSection);
 	std::fstream myfile("balance.txt", std::ios_base::in);
-	int result;
-	myfile >> result;
-	myfile.close();
+	int result = 0;
+	if (myfile.is_open()) 
+	{
+		myfile >> result;
+		myfile.close();
+	}
 	LeaveCriticalSection(&FileLockingCriticalSection);
 
 	return result;
@@ -38,26 +42,32 @@ int GetBalance()
 
 void Deposit(int money) 
 {
+	EnterCriticalSection(&BalanceCriticalSection);
 	int balance = GetBalance();
 	balance += money;
 
 	WriteToFile(balance);
 	printf("Balance after deposit: %d\n", balance);
+	LeaveCriticalSection(&BalanceCriticalSection);
 }
 
 void Withdraw(int money) 
 {
-	if (GetBalance() < money) 
+	EnterCriticalSection(&BalanceCriticalSection);
+	int balance = GetBalance();
+
+	if (balance < money)
 	{
 		printf("Cannot withdraw money, balance lower than %d\n", money);
+		LeaveCriticalSection(&BalanceCriticalSection);
 		return;
 	}
 
 	Sleep(20);
-	int balance = GetBalance();
 	balance -= money;
 	WriteToFile(balance);
 	printf("Balance after withdraw: %d\n", balance);
+	LeaveCriticalSection(&BalanceCriticalSection);
 }
 
 DWORD WINAPI DoDeposit(CONST LPVOID lpParameter)
@@ -74,9 +84,10 @@ DWORD WINAPI DoWithdraw(CONST LPVOID lpParameter)
 
 int _tmain(int argc, _TCHAR* argv[])
 {
-	HANDLE* handles = new HANDLE[49];
+	HANDLE* handles = new HANDLE[50];
 
 	InitializeCriticalSection(&FileLockingCriticalSection);
+	InitializeCriticalSection(&BalanceCriticalSection);
 
 	WriteToFile(0);
 
@@ -91,9 +102,12 @@ int _tmain(int argc, _TCHAR* argv[])
 	WaitForMultipleObjects(50, handles, true, INFINITE);
 	printf("Final Balance: %d\n", GetBalance());
 
-	getchar();
+	system("pause");
 
+	DeleteCriticalSection(&BalanceCriticalSection);
 	DeleteCriticalSection(&FileLockingCriticalSection);
+
+	delete[] handles;
 
 	return 0;
 }
