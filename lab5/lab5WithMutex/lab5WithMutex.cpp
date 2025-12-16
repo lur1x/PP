@@ -9,7 +9,7 @@ const int WITHDRAW_AMOUNT = 1000;
 
 
 CRITICAL_SECTION FileLockingCriticalSection;
-CRITICAL_SECTION BalanceCriticalSection;
+HANDLE hBalanceMutex = NULL;
 
 int ReadFromFile()
 {
@@ -42,24 +42,24 @@ int GetBalance()
 
 void Deposit(int money)
 {
-	EnterCriticalSection(&BalanceCriticalSection);
+	WaitForSingleObject(hBalanceMutex, INFINITE);
 	int balance = GetBalance();
 	balance += money;
 
 	WriteToFile(balance);
 	printf("Balance after deposit: %d\n", balance);
-	LeaveCriticalSection(&BalanceCriticalSection);
+	ReleaseMutex(hBalanceMutex);
 }
 
 void Withdraw(int money)
 {
-	EnterCriticalSection(&BalanceCriticalSection);
+	WaitForSingleObject(hBalanceMutex, INFINITE);
 	int balance = GetBalance();
 
 	if (balance < money)
 	{
 		printf("Cannot withdraw money, balance lower than %d\n", money);
-		LeaveCriticalSection(&BalanceCriticalSection);
+		ReleaseMutex(hBalanceMutex);
 		return;
 	}
 
@@ -67,7 +67,7 @@ void Withdraw(int money)
 	balance -= money;
 	WriteToFile(balance);
 	printf("Balance after withdraw: %d\n", balance);
-	LeaveCriticalSection(&BalanceCriticalSection);
+	ReleaseMutex(hBalanceMutex);
 }
 
 DWORD WINAPI DoDeposit(CONST LPVOID lpParameter)
@@ -87,7 +87,13 @@ int _tmain(int argc, _TCHAR* argv[])
 	HANDLE* handles = new HANDLE[50];
 
 	InitializeCriticalSection(&FileLockingCriticalSection);
-	InitializeCriticalSection(&BalanceCriticalSection);
+
+	hBalanceMutex = CreateMutex(NULL, FALSE, _T("Global\\BalanceMutex"));
+	if (hBalanceMutex == NULL) {
+		printf("Failed to create mutex\n");
+		return 1;
+	}
+
 
 	WriteToFile(0);
 
@@ -104,7 +110,8 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	system("pause");
 
-	DeleteCriticalSection(&BalanceCriticalSection);
+	CloseHandle(hBalanceMutex);
+
 	DeleteCriticalSection(&FileLockingCriticalSection);
 
 	delete[] handles;
