@@ -1,0 +1,42 @@
+private(x):
+Thread number: 0 x: 0
+Thread number: 1 x: 1
+Thread number: 10 x: 10
+Thread number: 3 x: 3
+Thread number: 4 x: 4
+Thread number: 5 x: 5
+Thread number: 7 x: 7
+Thread number: 6 x: 6
+Thread number: 8 x: 8
+Thread number: 9 x: 9
+Thread number: 2 x: 2
+x is 44
+
+firstprivate(x):
+Thread number: 0 x: 0
+Thread number: 7 x: 7
+Thread number: 10 x: 10
+Thread number: 5 x: 5
+Thread number: 8 x: 8
+Thread number: 6 x: 6
+Thread number: 9 x: 9
+Thread number: 1 x: 1
+Thread number: 2 x: 2
+Thread number: 3 x: 3
+Thread number: 4 x: 4
+x is 44
+
+
+lastprivate(x):
+Thread number: 0 x: 0
+Thread number: 4 x: 4
+Thread number: 2 x: 2
+Thread number: 6 x: 6
+Thread number: 1 x: 1
+Thread number: 5 x: 5
+Thread number: 3 x: 3
+Thread number: 7 x: 7
+Thread number: 8 x: 8
+Thread number: 10 x: 10
+Thread number: 9 x: 9
+x is 10
