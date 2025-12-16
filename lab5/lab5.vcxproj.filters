@@ -22,5 +22,8 @@
   <ItemGroup>
     <None Include="README.md" />
     <None Include=".gitignore" />
+    <None Include="run_two_instances.bat">
+      <Filter>Исходные файлы</Filter>
+    </None>
   </ItemGroup>
 </Project>
