@@ -8,16 +8,16 @@
 
 using Matrix = std::vector<std::vector<double>>;
 
-Matrix GenerateRandomMatrix(int n) 
+Matrix GenerateRandomMatrix(int n)
 {
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<> dis(0.0, 1.0);
 
     Matrix Matrix(n, std::vector<double>(n));
-    for (int i = 0; i < n; i++) 
+    for (int i = 0; i < n; i++)
     {
-        for (int j = 0; j < n; j++) 
+        for (int j = 0; j < n; j++)
         {
             Matrix[i][j] = dis(gen);
         }
@@ -25,35 +25,14 @@ Matrix GenerateRandomMatrix(int n)
     return Matrix;
 }
 
-Matrix MultiplyMatricesSequential(const Matrix& A, const Matrix& B) 
+Matrix MultiplyMatricesSequential(const Matrix &A, const Matrix &B)
 {
     int n = A.size();
     Matrix C(n, std::vector<double>(n, 0.0));
 
-    for (int i = 0; i < n; i++) 
+    for (int i = 0; i < n; i++)
     {
-        for (int j = 0; j < n; j++) 
-        {
-            double sum = 0.0;
-            for (int k = 0; k < n; k++) 
-            {
-                sum += A[i][k] * B[k][j];
-            }
-            C[i][j] = sum;
-        }
-    }
-    return C;
-}
-
-Matrix MultiplyMatricesParallelRow(const Matrix& A, const Matrix& B)
-{
-    int n = A.size();
-    Matrix C(n, std::vector<double>(n, 0.0));
-
-    #pragma omp parallel for
-    for (int i = 0; i < n; i++) 
-    {
-        for (int j = 0; j < n; j++) 
+        for (int j = 0; j < n; j++)
         {
             double sum = 0.0;
             for (int k = 0; k < n; k++)
@@ -66,15 +45,35 @@ Matrix MultiplyMatricesParallelRow(const Matrix& A, const Matrix& B)
     return C;
 }
 
-
-bool VerifyResults(const Matrix& C1, const Matrix& C2, double epsilon = 1e-6) 
+Matrix MultiplyMatricesParallelRow(const Matrix &A, const Matrix &B)
 {
-    int n = C1.size();
-    for (int i = 0; i < n; i++) 
+    int n = A.size();
+    Matrix C(n, std::vector<double>(n, 0.0));
+
+#pragma omp parallel for
+    for (int i = 0; i < n; i++)
     {
         for (int j = 0; j < n; j++)
         {
-            if (std::abs(C1[i][j] - C2[i][j]) > epsilon) 
+            double sum = 0.0;
+            for (int k = 0; k < n; k++)
+            {
+                sum += A[i][k] * B[k][j];
+            }
+            C[i][j] = sum;
+        }
+    }
+    return C;
+}
+
+bool VerifyResults(const Matrix &C1, const Matrix &C2, double epsilon = 1e-6)
+{
+    int n = C1.size();
+    for (int i = 0; i < n; i++)
+    {
+        for (int j = 0; j < n; j++)
+        {
+            if (std::abs(C1[i][j] - C2[i][j]) > epsilon)
             {
                 return false;
             }
@@ -83,7 +82,7 @@ bool VerifyResults(const Matrix& C1, const Matrix& C2, double epsilon = 1e-6)
     return true;
 }
 
-Matrix ReadMatrix(std::istream& input)
+Matrix ReadMatrix(std::istream &input)
 {
     Matrix matrix;
     std::string line;
@@ -110,7 +109,7 @@ Matrix ReadMatrix(std::istream& input)
     return matrix;
 }
 
-static void PrintMatrix(std::ostream& output, const Matrix& matrix)
+static void PrintMatrix(std::ostream &output, const Matrix &matrix)
 {
     for (int i = 0; i < matrix.size(); i++)
     {
