@@ -14,20 +14,21 @@ using namespace std::chrono;
 
 struct Params
 {
-    Bitmap* in;
-    Bitmap* out;
+    Bitmap *in;
+    Bitmap *out;
     uint32_t startHeight;
     uint32_t endHeight;
     uint32_t startWidth;
     uint32_t endWidth;
 };
 
-void Blur(int radius, Params* params)
+void Blur(int radius, Params *params)
 {
-    if (!params || !params->in || !params->out) return;
+    if (!params || !params->in || !params->out)
+        return;
 
-    Bitmap* in = params->in;
-    Bitmap* out = params->out;
+    Bitmap *in = params->in;
+    Bitmap *out = params->out;
     int width = in->GetWidth();
     int height = in->GetHeight();
 
@@ -44,10 +45,10 @@ void Blur(int radius, Params* params)
             double weightSum = 0;
 
             for (int iy = static_cast<int>(i) - static_cast<int>(rs);
-                iy <= static_cast<int>(i) + static_cast<int>(rs); ++iy)
+                 iy <= static_cast<int>(i) + static_cast<int>(rs); ++iy)
             {
                 for (int ix = static_cast<int>(j) - static_cast<int>(rs);
-                    ix <= static_cast<int>(j) + static_cast<int>(rs); ++ix)
+                     ix <= static_cast<int>(j) + static_cast<int>(rs); ++ix)
                 {
                     int x = min(width - 1, max(0, ix));
                     int y = min(height - 1, max(0, iy));
@@ -57,8 +58,9 @@ void Blur(int radius, Params* params)
                     float distanceSquare = (dx * dx) + (dy * dy);
                     float weight = exp(-distanceSquare / (2.0f * sigmaSquare)) / twoPiSigmaSquare;
 
-                    rgb32* pixel = in->GetPixel(x, y);
-                    if (!pixel) continue;
+                    rgb32 *pixel = in->GetPixel(x, y);
+                    if (!pixel)
+                        continue;
 
                     r += pixel->r * weight;
                     g += pixel->g * weight;
@@ -69,14 +71,14 @@ void Blur(int radius, Params* params)
 
             if (weightSum > 0)
             {
-                rgb32* srcPixel = in->GetPixel(j, i);
-                rgb32* dstPixel = out->GetPixel(j, i);
+                rgb32 *srcPixel = in->GetPixel(j, i);
+                rgb32 *dstPixel = out->GetPixel(j, i);
                 if (srcPixel && dstPixel)
                 {
                     dstPixel->r = static_cast<uint8_t>(min(255.0, max(0.0, r / weightSum)));
                     dstPixel->g = static_cast<uint8_t>(min(255.0, max(0.0, g / weightSum)));
                     dstPixel->b = static_cast<uint8_t>(min(255.0, max(0.0, b / weightSum)));
-                    dstPixel->a = srcPixel->a; 
+                    dstPixel->a = srcPixel->a;
                 }
             }
         }
@@ -85,12 +87,12 @@ void Blur(int radius, Params* params)
 
 DWORD WINAPI ThreadProc(LPVOID lpParam)
 {
-    Params* params = (Params*)lpParam;
+    Params *params = (Params *)lpParam;
     Blur(4, params);
     return 0;
 }
 
-HANDLE CreateThreadWithAffinity(Params* params, int threadIndex, int coresCount)
+HANDLE CreateThreadWithAffinity(Params *params, int threadIndex, int coresCount)
 {
     HANDLE threadHandle = CreateThread(NULL, 0, &ThreadProc, params, CREATE_SUSPENDED, NULL);
 
@@ -104,12 +106,12 @@ HANDLE CreateThreadWithAffinity(Params* params, int threadIndex, int coresCount)
     return threadHandle;
 }
 
-void WaitForAllThreads(HANDLE* handles, int threadsCount)
+void WaitForAllThreads(HANDLE *handles, int threadsCount)
 {
     WaitForMultipleObjects(static_cast<DWORD>(threadsCount), handles, TRUE, INFINITE);
 }
 
-void CleanupThreadResources(HANDLE* handles, Params* params, int threadsCount)
+void CleanupThreadResources(HANDLE *handles, Params *params, int threadsCount)
 {
     for (int i = 0; i < threadsCount; i++)
     {
@@ -122,7 +124,7 @@ void CleanupThreadResources(HANDLE* handles, Params* params, int threadsCount)
     delete[] params;
 }
 
-void SequentialBlur(Bitmap* in, Bitmap* out)
+void SequentialBlur(Bitmap *in, Bitmap *out)
 {
     Params params;
     params.in = in;
@@ -135,7 +137,7 @@ void SequentialBlur(Bitmap* in, Bitmap* out)
     Blur(4, &params);
 }
 
-void ParallelBlur(Bitmap* in, Bitmap* out, int threadsCount, int coresCount)
+void ParallelBlur(Bitmap *in, Bitmap *out, int threadsCount, int coresCount)
 {
     int height = in->GetHeight();
     int width = in->GetWidth();
@@ -143,8 +145,8 @@ void ParallelBlur(Bitmap* in, Bitmap* out, int threadsCount, int coresCount)
     int partHeight = height / threadsCount;
     int heightRemaining = height % threadsCount;
 
-    Params* paramsArray = new Params[threadsCount];
-    HANDLE* handles = new HANDLE[threadsCount];
+    Params *paramsArray = new Params[threadsCount];
+    HANDLE *handles = new HANDLE[threadsCount];
 
     int currentStart = 0;
     for (int i = 0; i < threadsCount; i++)
@@ -171,7 +173,8 @@ void ParallelBlur(Bitmap* in, Bitmap* out, int threadsCount, int coresCount)
 
             for (int j = 0; j < i; j++)
             {
-                if (handles[j]) CloseHandle(handles[j]);
+                if (handles[j])
+                    CloseHandle(handles[j]);
             }
             delete[] handles;
             delete[] paramsArray;
@@ -184,14 +187,14 @@ void ParallelBlur(Bitmap* in, Bitmap* out, int threadsCount, int coresCount)
     CleanupThreadResources(handles, paramsArray, threadsCount);
 }
 
-Bitmap* CreateBitmapCopy(Bitmap* src)
+Bitmap *CreateBitmapCopy(Bitmap *src)
 {
     static int tempCounter = 0;
     std::string tempFile = "temp_copy_" + std::to_string(tempCounter++) + ".bmp";
 
     src->Save(tempFile.c_str());
 
-    Bitmap* copy = new Bitmap(tempFile.c_str());
+    Bitmap *copy = new Bitmap(tempFile.c_str());
 
     remove(tempFile.c_str());
 
@@ -221,14 +224,14 @@ void SetProcessCores(int coresCount)
 
 int CalculateRequiredRepeats(long long durationMs)
 {
-    if (durationMs < 500)  
+    if (durationMs < 500)
     {
         return max(2, 500 / max(1, static_cast<int>(durationMs)));
     }
     return 1;
 }
 
-void PrintUsage(const char* programName)
+void PrintUsage(const char *programName)
 {
     std::cout << "Использование: " << programName << " <input.bmp> <output.bmp> <потоки> <ядра>" << std::endl;
     std::cout << "  потоки: 1 для последовательной обработки, >1 для параллельной" << std::endl;
@@ -239,7 +242,7 @@ void PrintUsage(const char* programName)
     std::cout << "  " << programName << " input.bmp output.bmp 4 2   (параллельно, 4 потока, 2 ядра)" << std::endl;
 }
 
-bool ValidateArguments(int argc, char* argv[])
+bool ValidateArguments(int argc, char *argv[])
 {
     if (argc != 5)
     {
@@ -265,7 +268,7 @@ bool ValidateArguments(int argc, char* argv[])
     return true;
 }
 
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
     setlocale(LC_ALL, "RU");
 
@@ -274,8 +277,8 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    const char* inputFile = argv[1];
-    const char* outputFile = argv[2];
+    const char *inputFile = argv[1];
+    const char *outputFile = argv[2];
     int threadsCount = atoi(argv[3]);
     int coresCount = atoi(argv[4]);
 
@@ -292,15 +295,15 @@ int main(int argc, char* argv[])
         SetProcessCores(coresCount);
 
         std::cout << "Загрузка изображения..." << std::endl;
-        Bitmap* originalBmp = new Bitmap(inputFile);
+        Bitmap *originalBmp = new Bitmap(inputFile);
         std::cout << "Изображение загружено. Размер: " << originalBmp->GetWidth() << "x" << originalBmp->GetHeight() << std::endl;
 
-        Bitmap* workingBmp = CreateBitmapCopy(originalBmp);
+        Bitmap *workingBmp = CreateBitmapCopy(originalBmp);
 
         std::cout << "Выполнение тестового запуска..." << std::endl;
         auto testStart = high_resolution_clock::now();
 
-        Bitmap* outputBmp = CreateBitmapCopy(originalBmp);
+        Bitmap *outputBmp = CreateBitmapCopy(originalBmp);
 
         if (threadsCount == 1)
         {
@@ -322,7 +325,7 @@ int main(int argc, char* argv[])
         if (repeats > 1)
         {
             std::cout << "Тест был слишком быстрым (" << testDuration.count() << "мс), применяем размытие "
-                << repeats << " раз(а)" << std::endl;
+                      << repeats << " раз(а)" << std::endl;
 
             delete workingBmp;
             delete outputBmp;
@@ -374,14 +377,14 @@ int main(int argc, char* argv[])
         std::cout << "Ядра: " << coresCount << std::endl;
         std::cout << "Общее время выполнения: " << totalTime.count() << " мс" << std::endl;
 
-        std::cout << "\n" << totalTime.count() << " мс" << std::endl;
+        std::cout << "\n"
+                  << totalTime.count() << " мс" << std::endl;
 
         delete originalBmp;
         delete workingBmp;
         delete outputBmp;
-
     }
-    catch (const std::exception& e)
+    catch (const std::exception &e)
     {
         auto endTime = high_resolution_clock::now();
         auto totalTime = duration_cast<milliseconds>(endTime - startTime);
