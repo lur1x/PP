@@ -2,9 +2,9 @@
 #include <string>
 #include <iostream>
 #include <fstream>
-#include <mmsystem.h> 
+#include <mmsystem.h>
 
-#pragma comment(lib, "winmm.lib")  
+#pragma comment(lib, "winmm.lib")
 
 struct ThreadData
 {
@@ -15,9 +15,12 @@ struct ThreadData
 
 bool isPrime(int n)
 {
-    if (n <= 1) return false;
-    if (n <= 3) return true;
-    if (n % 2 == 0 || n % 3 == 0) return false;
+    if (n <= 1)
+        return false;
+    if (n <= 3)
+        return true;
+    if (n % 2 == 0 || n % 3 == 0)
+        return false;
 
     for (int i = 5; i * i <= n; i += 6)
     {
@@ -31,7 +34,7 @@ bool isPrime(int n)
 
 DWORD WINAPI ThreadProc(CONST LPVOID lpParam)
 {
-    ThreadData* data = (ThreadData*)lpParam;
+    ThreadData *data = (ThreadData *)lpParam;
 
     std::string filename = "thread_" + std::to_string(data->threadNumber) + ".txt";
     std::ofstream outFile(filename);
@@ -58,7 +61,7 @@ DWORD WINAPI ThreadProc(CONST LPVOID lpParam)
         DWORD currentTime = timeGetTime();
         DWORD elapsedTime = currentTime - data->startTime;
 
-        outFile  << elapsedTime << std::endl;
+        outFile << elapsedTime << std::endl;
 
         Sleep(10 + (data->threadNumber * 5));
     }
@@ -98,8 +101,8 @@ int main()
 
     DWORD startTime = timeGetTime();
 
-    ThreadData* threadData = new ThreadData[THREAD_COUNT];
-    HANDLE* handles = new HANDLE[THREAD_COUNT];
+    ThreadData *threadData = new ThreadData[THREAD_COUNT];
+    HANDLE *handles = new HANDLE[THREAD_COUNT];
 
     for (int i = 0; i < THREAD_COUNT; i++)
     {
@@ -158,7 +161,6 @@ int main()
 
     std::cout << "\nВсе потоки завершили работу" << std::endl;
     std::cout << "Данные сохранены в файлы" << std::endl;
-
 
     return 0;
 }
