@@ -50,7 +50,7 @@ Matrix MultiplyMatricesParallelRow(const Matrix &A, const Matrix &B)
     int n = A.size();
     Matrix C(n, std::vector<double>(n, 0.0));
 
-#pragma omp parallel for
+#pragma omp parallel for collapse(2)
     for (int i = 0; i < n; i++)
     {
         for (int j = 0; j < n; j++)
@@ -82,32 +82,32 @@ bool VerifyResults(const Matrix &C1, const Matrix &C2, double epsilon = 1e-6)
     return true;
 }
 
-Matrix ReadMatrix(std::istream &input)
-{
-    Matrix matrix;
-    std::string line;
-
-    while (std::getline(input, line))
-    {
-        if (line.empty())
-        {
-            continue;
-        }
-
-        std::vector<double> row;
-        std::istringstream iss(line);
-        double value;
-
-        while (iss >> value)
-        {
-            row.push_back(value);
-        }
-
-        matrix.push_back(row);
-    }
-
-    return matrix;
-}
+//Matrix ReadMatrix(std::istream &input)
+//{
+//    Matrix matrix;
+//    std::string line;
+//
+//    while (std::getline(input, line))
+//    {
+//        if (line.empty())
+//        {
+//            continue;
+//        }
+//
+//        std::vector<double> row;
+//        std::istringstream iss(line);
+//        double value;
+//
+//        while (iss >> value)
+//        {
+//            row.push_back(value);
+//        }
+//
+//        matrix.push_back(row);
+//    }
+//
+//    return matrix;
+//}
 
 static void PrintMatrix(std::ostream &output, const Matrix &matrix)
 {
