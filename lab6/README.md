@@ -31,7 +31,7 @@
 ### Постановка задачи
 Необходимо объяснить разницу между `private(x)`, `firstprivate(x)` и `lastprivate(x)` на примере ниже.
 
-```cpp
+```cpppp
 int main()
 {
     int x = 44;
@@ -79,27 +79,29 @@ int main()
 2.  **Примитивная синхронизация (`atomic`)** – результат верный, но производительность катастрофически падает из-за сериализации.
 3.  **Оптимальная синхронизация (`reduction`)** – результат верный, а ускорение (**speedup**) по сравнению с последовательной версией составляет `0.1096 / 0.0153 ≈ 7.2 раза`. Это отличный показатель эффективности параллелизма для данной задачи.
 
+
 # Вывод по 2 заданию
 
 ## **Что происходит в исходном коде с `private(x)`**
 
-```c
+```cpp
 int main()
 {
-    int x = 44;                    // Исходная x в main
+    int x = 44;                    
     #pragma omp parallel for private(x)
-    for(int i = 0; i <= 10; i++){
-        x = i;                     // Работа с ЛОКАЛЬНОЙ копией x
+    for(int i = 0; i <= 10; i++)
+    {
+        x = i;                     
         printf("Thread number: %d x: %d\n", omp_get_thread_num(), x);
     }
-    printf("x is %d\n", x);        // Печатает ИСХОДНУЮ x из main
+    printf("x is %d\n", x);       
 }
 ```
 
 ## **Разница между `private`, `firstprivate` и `lastprivate`**
 
 ### **1. `private(x)`**
-```c
+```cpp
 #pragma omp parallel for private(x)
 ```
 - **Создаёт совершенно новую переменную** `x` для каждого потока
@@ -119,7 +121,7 @@ x is 44  ← Исходная x не изменилась!
 ```
 
 ### **2. `firstprivate(x)`**
-```c
+```cpp
 #pragma omp parallel for firstprivate(x)
 ```
 - **Создаёт новую переменную** `x` для каждого потока
@@ -136,7 +138,7 @@ x is 44  ← Исходная x не изменилась!
 ```
 
 ### **3. `lastprivate(x)`**
-```c
+```cpp
 #pragma omp parallel for lastprivate(x)
 ```
 - **Создаёт новую переменную** `x` для каждого потока
@@ -156,7 +158,7 @@ x is 10  ← Исходная x получила значение из посл�
 ## **Комбинированные варианты**
 
 ### **`firstprivate(x) lastprivate(x)`**
-```c
+```cpp
 #pragma omp parallel for firstprivate(x) lastprivate(x)
 ```
 - Инициализирует каждую копию значением 44
